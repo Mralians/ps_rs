@@ -1,8 +1,7 @@
-use process;
-use std::fs::File;
-use std::io::Read;
-use std::process::id;
+use process::process;
 fn main() {
-    let state = process::get_process_info(684).unwrap();
+    let args = std::env::args().collect::<Vec<_>>();
+    let pid = args.get(1).unwrap().trim().parse::<u32>().unwrap();
+    let state = process::get_process_info(pid).unwrap();
     println!("{state:#?}");
 }

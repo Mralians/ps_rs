@@ -1,8 +1,10 @@
-use std::fs::File;
+use crate::error::ProcessError;
 
-use super::utils::get_status_value;
+use super::utils::get_proc_status_value;
 #[derive(Debug, Default, PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum Signal {
+    #[default]
     SIGHUP,
     SIGINT,
     SIGQUIT,
@@ -37,11 +39,9 @@ pub enum Signal {
     SIGRTMIN,
     UNUSED,
     SIGRTMAX,
-    #[default]
-    UNKNOWN,
 }
 impl TryFrom<u32> for Signal {
-    type Error = String;
+    type Error = ProcessError;
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
             1 => Ok(Self::SIGHUP),
@@ -78,27 +78,14 @@ impl TryFrom<u32> for Signal {
             32 => Ok(Self::SIGRTMIN),
             33..=63 => Ok(Self::UNUSED),
             64 => Ok(Self::SIGRTMAX),
-            _ => Err("UNKNOWN".to_owned()),
+            other_sig => Err(ProcessError::SignalConversionError(other_sig)),
         }
     }
 }
-pub(super) fn get_ignoring_signals(status: &str) -> Vec<Signal> {
+pub(super) fn get_ignoring_signals(pid: u32) -> Result<Vec<Signal>, ProcessError> {
     let mut signals: Vec<Signal> = vec![];
-    let sig_ign = get_status_value(status, "SigIgn").unwrap();
-    let value = u64::from_str_radix(&sig_ign, 16).unwrap();
-    let mut mask = 1_u64;
-    for i in 0..64 {
-        if (value & mask) != 0 {
-            signals.push(i.try_into().unwrap())
-        }
-        mask <<= 1;
-    }
-    signals
-}
-pub(super) fn get_pending_signals(status: &str) -> Vec<Signal> {
-    let mut signals: Vec<Signal> = vec![];
-    let sig_pnd = get_status_value(status, "SigPnd").unwrap();
-    let value = u64::from_str_radix(&sig_pnd, 16).unwrap();
+    let sig_ign = get_proc_status_value(pid, "SigIgn")?;
+    let value = u64::from_str_radix(&sig_ign, 16).map_err(ProcessError::Parse)?;
     let mut mask = 1_u64;
     for i in 1..=64 {
         if (value & mask) != 0 {
@@ -106,12 +93,12 @@ pub(super) fn get_pending_signals(status: &str) -> Vec<Signal> {
         }
         mask <<= 1;
     }
-    signals
+    Ok(signals)
 }
-pub(super) fn get_block_signals(status: &str) -> Vec<Signal> {
+pub(super) fn get_pending_signals(pid: u32) -> Result<Vec<Signal>, ProcessError> {
     let mut signals: Vec<Signal> = vec![];
-    let sig_blk = get_status_value(status, "SigBlk").unwrap();
-    let value = u64::from_str_radix(&sig_blk, 16).unwrap();
+    let sig_pnd = get_proc_status_value(pid, "SigPnd")?;
+    let value = u64::from_str_radix(&sig_pnd, 16).map_err(ProcessError::Parse)?;
     let mut mask = 1_u64;
     for i in 1..=64 {
         if (value & mask) != 0 {
@@ -119,19 +106,31 @@ pub(super) fn get_block_signals(status: &str) -> Vec<Signal> {
         }
         mask <<= 1;
     }
-    signals
+    Ok(signals)
 }
-pub(super) fn get_cgt_signals(status: &str) -> Vec<Signal> {
+pub(super) fn get_block_signals(pid: u32) -> Result<Vec<Signal>, ProcessError> {
     let mut signals: Vec<Signal> = vec![];
-    let sig_cgt = get_status_value(status, "SigCgt").unwrap();
-    println!("{sig_cgt}");
-    let value = u64::from_str_radix(&sig_cgt, 16).unwrap();
-    let mut mask = 1_64;
+    let sig_blk = get_proc_status_value(pid, "SigBlk")?;
+    let value = u64::from_str_radix(&sig_blk, 16).map_err(ProcessError::Parse)?;
+    let mut mask = 1_u64;
     for i in 1..=64 {
         if (value & mask) != 0 {
             signals.push(i.try_into().unwrap())
         }
         mask <<= 1;
     }
-    signals
+    Ok(signals)
+}
+pub(super) fn get_cgt_signals(pid: u32) -> Result<Vec<Signal>, ProcessError> {
+    let mut signals: Vec<Signal> = vec![];
+    let sig_cgt = get_proc_status_value(pid, "SigCgt")?;
+    let value = u64::from_str_radix(&sig_cgt, 16).map_err(ProcessError::Parse)?;
+    let mut mask = 1_u64;
+    for i in 1..=64 {
+        if (value & mask) != 0 {
+            signals.push(i.try_into().unwrap())
+        }
+        mask <<= 1;
+    }
+    Ok(signals)
 }
